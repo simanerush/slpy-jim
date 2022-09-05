@@ -1,0 +1,26 @@
+# Let's try this
+print(127)
+print(1 + 2 + 4 + 8 + 16 + 32 + 64) # How about a sum?
+pass
+print(43)
+print(64 - 32 + 16 - 8 + 4 - 2 + 1) # How about a mix of plus and minus?
+pass
+print(128)
+print(129 // 2 * 2) # A mix of times/div?
+pass
+print(126)
+print(1 + 2 * 3 + 4 * 5 * 6) # a sum of products?
+pass
+print(95)
+print(1 + 2 * (3 + 4 * (5 + 6))) # let's nest
+pass
+# Maybe try some variable names...
+x = 2
+y = 3
+z = 4
+snake_case_variable = x * y * z
+print(24)
+print(snake_case_variable)
+camelCaseVariable   = snake_case_variable * (snake_case_variable + 1)
+print(600)
+print(camelCaseVariable)

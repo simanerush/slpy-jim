@@ -1,0 +1,4 @@
+a = 5
+a = input("new: ")
+
+print(a)

@@ -1,0 +1,9 @@
+# Let's make some
+# strings
+# and put them in input
+your_name = input("Enter your name as an integer: ")
+yourAgeInYears = input("How old are you? Gotta ask...\n")
+why_Not = input("Do you prefer \"Why?\"?? [1] \n\tOr \"Why not?\"? [0]\nPlease enter 1 or 0: ")
+print(your_name)
+print(yourAgeInYears)
+print(why_Not)
