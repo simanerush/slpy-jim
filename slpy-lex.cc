@@ -5,6 +5,7 @@
 #include <sstream>
 #include <cassert>
 
+#include "slpy-util.hh"
 #include "slpy-lex.hh"
 
 //
@@ -29,121 +30,21 @@
 //     TokenStream ts = tz.lex();
 //
 
+// * * * * *
+//
+// Some utility functions' prototypes. Defined at the bottom.
+//
+// * * * * * 
+bool is_name(std::string s);   // Is the token string a name?
+bool is_number(std::string s); // Is the token string an integer literal?
+bool is_string(std::string s); // Is the token string an string literal?
 
-/* * * * * 
- *
- * UTILITY FUNCTIONS for lexical analysis.
- *
- * * * * */
-
+// * * * * *
 //
-// de_escape(s)
+// class Token
 //
-// Builds a string `t` from string `s` where all the escaped characters
-// (e.g. `\\`, `\n`) have been replaced by their actual characters.
+// Defines a chunk of characters at a location in a SLPY source file.
 //
-// Returns that de-escaped string.
-//
-// (See also: re_escape in slpy-parse.cc)
-//
-std::string de_escape(std::string s) {
-    std::stringstream de_s;
-    bool escape = false;
-    for (char c: s) {
-        if (escape) {
-            if (c == 'n') {
-                de_s << '\n';
-            } else if (c == 't') {
-                de_s << '\t';
-            } else if (c == '\\') {
-                de_s << '\\';
-            } else if (c == '"') {
-                de_s << '"';
-            } else {
-                assert(false);
-            }
-            escape = false;        
-        } else if (c == '\\') {
-            escape = true;
-        } else {
-            de_s << c;
-        }
-    }
-    return de_s.str();
-}
-
-//
-// is_string(s)
-//
-// Determines whether string `s` is a string literal. This simply
-// checks whether the first and last characters are double-quotes.
-//
-// Returns `true` or `false` accordingly.
-//
-bool is_string(std::string s) {
-    int slen = s.length();
-    if (slen < 2) {
-        return false;
-    }
-    return (s[0] == '\"' && s[slen-1] == '\"');
-}
-
-//
-// is_number(s)
-//
-// Determines whether string `s` contains the decimal digits of an integer.
-//
-// Returns `true` or `false` accordingly.
-//
-bool is_number(std::string s) {
-    if (s.length() == 0) {
-        return false;
-    }
-    if (s[0] <= '0' || s[0] > '9') {
-        return false;
-    }
-    for (char c : s) {
-        if (c < '0' || c > '9') {
-            return false;
-        }
-    }
-    return true;
-}
-
-//
-// is_name(s)
-//
-// Determines whether string `s` describes a valid identifier or reserved word.
-//
-// Returns `true` or `false` accordingly.
-//
-bool is_name(std::string s) {
-    if (s.length() == 0) {
-        return false;
-    }
-    if ((s[0] >= 'a' && s[0] <= 'z')
-        || (s[0] >= 'A' && s[0] <= 'Z')
-        || (s[0] == '_')) {
-        for (char c : s) {
-            if ((c >= 'a' && c <= 'z')
-                || (c >= 'A' && c <= 'Z')
-                || (c == '_')
-                || (c >= '0' && c <= '9')) {
-                continue;
-            }
-            return false;
-        }
-        return true;
-    }
-    return false;
-}
-
-
-/* * * * * 
- *
- *  for lexical analysis.
- *
- * * * * */
 
 //
 // Token { s, r, c }
@@ -188,7 +89,9 @@ std::ostream& operator<<(std::ostream& outs, Token tkn) {
 }
 
 // * * * * *
-// TokenStream methods for providing a sequence of tokens to a parser.
+// class TokenStream
+//
+// Provides a sequence of SLPY tokens to be parsed.
 //
 
 //
@@ -196,10 +99,29 @@ std::ostream& operator<<(std::ostream& outs, Token tkn) {
 //
 // constructs an empty sequence.
 //
-TokenStream::TokenStream(void) : 
+TokenStream::TokenStream(std::string filename) :
+    src_name {filename},
     tokens {},
     where {0}
 { }
+
+//
+// ts.source_name();
+//
+// Gets the name of the SLPY source file for this token stream.
+//
+std::string TokenStream::source_name(void) {
+    return src_name;
+}
+
+//
+// ts.locate();
+//
+// Gets info about the current token's place in the code.
+//
+Locn TokenStream::locate(void) {
+    return Locn { src_name, current().row, current().column };
+}
 
 // ts.append(t) 
 //
@@ -289,8 +211,16 @@ bool TokenStream::at_EOF(void) {
 // Raises an error if it doesn't.
 //
 void TokenStream::eat(std::string match) {
-    assert(match == current().token);
-    advance();
+    if (match == current().token) {
+        advance();
+    } else {
+        std::string msg = "Syntax error: expected '";
+        msg += match;
+        msg += "' but saw '";
+        msg += current().token;
+        msg += "' instead.";
+        throw SlpyError { locate(), msg };
+    }
 }
 
 //
@@ -300,8 +230,15 @@ void TokenStream::eat(std::string match) {
 // Raises an error if it doesn't.
 //
 void TokenStream::eat_EOLN(void) {
-    assert(at_EOLN());
-    advance();
+    if (at_EOLN()) {
+        advance();
+    } else {
+        std::string msg = "Syntax error: expected end-of-line ";
+        msg += "but saw '";
+        msg += current().token;
+        msg += "' instead.";
+        throw SlpyError { locate(), msg };
+    }
 }
 
 //
@@ -313,10 +250,17 @@ void TokenStream::eat_EOLN(void) {
 // Returns the name as a string.
 //
 std::string TokenStream::eat_name(void) {
-    assert(at_name());
-    std::string x = current().token;
-    advance();
-    return x;
+    if (at_name()) {
+        std::string x = current().token;
+        advance();
+        return x;
+    } else {
+        std::string msg = "Syntax error: expected an identifier ";
+        msg += "but saw '";
+        msg += current().token;
+        msg += "' instead.";
+        throw SlpyError { locate(), msg };
+    }
 }
 
 //
@@ -328,10 +272,17 @@ std::string TokenStream::eat_name(void) {
 // Returns the integer value.
 //
 int TokenStream::eat_number(void) {
-    assert(at_number());
-    int n = std::stoi(current().token);
-    advance();
-    return n;
+    if (at_number()) {
+        int nmbr = std::stoi(current().token);
+        advance();
+        return nmbr;
+    } else {
+        std::string msg = "Syntax error: expected an integer constant ";
+        msg += "but saw '";
+        msg += current().token;
+        msg += "' instead.";
+        throw SlpyError { locate(), msg };
+    }
 }
 
 //
@@ -343,10 +294,17 @@ int TokenStream::eat_number(void) {
 // Returns the string (transforming it by removing escaped characters).
 //
 std::string TokenStream::eat_string(void) {
-    assert(at_string());
-    std::string s = current().token;
-    advance();
-    return de_escape(s.substr(1,s.length()-2));
+    if (at_string()) {
+        std::string strg = current().token;
+        advance();
+        return de_escape(strg.substr(1,strg.length()-2));
+    } else {
+        std::string msg = "Syntax error: expected a string literal ";
+        msg += "but saw '";
+        msg += current().token;
+        msg += "' instead.";
+        throw SlpyError { locate(), msg };
+    }
 }
 
 /* * * * *
@@ -373,7 +331,8 @@ enum TokenizerState { INIT, // At the start of a line, haven't seen a token.
                       TABS, // At the start of a line, processing indentation.
                       CMMT_INIT, // Processing an end-of-line comment.
                       CMMT_WTHN,
-                      NMBR, // Processing a sequence of decimal digits.
+                      NMBR, // Processing decimal digits starting with 1-9.
+                      ZERO, // Processing a 0 literal.
                       STRG, // Processing a string literal.
                       ESCP, // Processing `\n`, `\t` etc within string literal.
                       SLSH, // Processing `//` token.
@@ -396,14 +355,19 @@ Tokenizer::Tokenizer(char* src_file_name) :
     src_stream   { src_file_name },
     state        { INIT },
     curr_token   { },
-    tokenstream  { },
+    tokenstream  { src_file_name },
     row          { 1 },
     column       { 1 },
     start_row    { 1 },
     start_column { 1 }
 {
-    curr_char = src_stream.get();
-    start_fresh_token();
+    if (src_stream) {
+        curr_char = src_stream.get();
+        start_fresh_token();
+    } else {
+        throw SlpyError { Locn { src_file_name, -1, -1 },
+                             "File not found." };
+    }
 }
 
 // tz.advance_char()
@@ -499,9 +463,7 @@ void Tokenizer::consume_then_issue(void) {
 // Need to make this an exception.
 //
 void Tokenizer::bail_with_error(std::string message) {
-    std::cerr << src_name << ":" << row << ":" << column << ": ";
-    std::cerr << message << std::endl;
-    state = HALT;
+    throw SlpyError { Locn {src_name, row, column}, message };
 }
 
 //
@@ -510,9 +472,8 @@ void Tokenizer::bail_with_error(std::string message) {
 // Need to make this an exception.
 //
 void Tokenizer::bail_with_char(std::string message) {
-    std::cerr << src_name << ":" << row << ":" << column << ": ";
-    std::cerr << message << "'" << curr_char << "'" << std::endl;
-    state = HALT;
+    throw SlpyError { Locn {src_name, row, column },
+                         message + "'" + curr_char + "'" };
 }
 
 //
@@ -535,10 +496,16 @@ TokenStream Tokenizer::lex(void) {
         case INIT:
             if (curr_char >= '1' && curr_char <= '9') {
                 //
-                // Is it a number?
+                // Is it a positive number?
                 start_fresh_token();
                 state = NMBR;  // => Process it.
 
+            } else if (curr_char == '0') {
+                //
+                // Is it zero?
+                start_fresh_token();
+                consume_char();
+                state = ZERO;  // => Process it.
             } else if (curr_char == '"') {
                 //
                 // Is it a string literal?
@@ -637,6 +604,15 @@ TokenStream Tokenizer::lex(void) {
                 state = WTHN;
             } else {
                 bail_with_error("Expected a // operator.");
+            }
+            break;
+
+        case ZERO:
+            if (curr_char < '0' || curr_char > '9') {
+                issue_token();
+                state = WTHN;
+            } else {
+                bail_with_error("Non-zero integer literal starts with zero digit.");
             }
             break;
                 
@@ -772,3 +748,77 @@ TokenStream Tokenizer::lex(void) {
     return tokenstream;
 }
     
+/* * * * * 
+ *
+ * UTILITY FUNCTIONS for lexical analysis.
+ *
+ * * * * */
+
+//
+// is_string(s)
+//
+// Determines whether string `s` is a string literal. This simply
+// checks whether the first and last characters are double-quotes.
+//
+// Returns `true` or `false` accordingly.
+//
+bool is_string(std::string s) {
+    int slen = s.length();
+    if (slen < 2) {
+        return false;
+    }
+    return (s[0] == '\"' && s[slen-1] == '\"');
+}
+
+//
+// is_number(s)
+//
+// Determines whether string `s` contains the decimal digits of an integer.
+//
+// Returns `true` or `false` accordingly.
+//
+bool is_number(std::string s) {
+    if (s.length() == 0) {
+        return false;
+    }
+    if (s.length() == 1 && s[0] == '0') {
+        return true;
+    }
+    if (s[0] <= '0' || s[0] > '9') {
+        return false;
+    }
+    for (char c : s) {
+        if (c < '0' || c > '9') {
+            return false;
+        }
+    }
+    return true;
+}
+
+//
+// is_name(s)
+//
+// Determines whether string `s` describes a valid identifier or reserved word.
+//
+// Returns `true` or `false` accordingly.
+//
+bool is_name(std::string s) {
+    if (s.length() == 0) {
+        return false;
+    }
+    if ((s[0] >= 'a' && s[0] <= 'z')
+        || (s[0] >= 'A' && s[0] <= 'Z')
+        || (s[0] == '_')) {
+        for (char c : s) {
+            if ((c >= 'a' && c <= 'z')
+                || (c >= 'A' && c <= 'Z')
+                || (c == '_')
+                || (c >= '0' && c <= '9')) {
+                continue;
+            }
+            return false;
+        }
+        return true;
+    }
+    return false;
+}

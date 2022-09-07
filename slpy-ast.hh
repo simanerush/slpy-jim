@@ -1,6 +1,7 @@
 #ifndef __SLPY_AST_H_
 #define __SLPY_AST_H_
 
+// slpy-ast.hh
 //
 // Object classes used by the parser to represent the syntax trees of
 // Slpy programs.
@@ -28,6 +29,11 @@
 #include <memory>
 #include <utility>
 #include <iostream>
+#include "slpy-util.hh"
+
+//
+// We "pre-declare" each AST subclass for mutually recursive definitions.
+//
 
 class Prgm;
 class Blck;
@@ -43,12 +49,17 @@ class Mnus;
 class Tmes;
 class IDiv;
 class Inpt;
+class IntC;
 class Lkup;
 class Nmbr;
 
+//
+// We alias some types, including pointers and vectors.
+//
+
 typedef std::string Name;
 typedef std::unordered_map<Name,int> Ctxt;
-
+//
 typedef std::shared_ptr<Lkup> Lkup_ptr; 
 typedef std::shared_ptr<Nmbr> Nmbr_ptr; 
 typedef std::shared_ptr<Inpt> Inpt_ptr; 
@@ -56,7 +67,6 @@ typedef std::shared_ptr<Plus> Plus_ptr;
 typedef std::shared_ptr<Mnus> Mnus_ptr; 
 typedef std::shared_ptr<Tmes> Tmes_ptr;
 typedef std::shared_ptr<IDiv> IDiv_ptr;
-
 //
 typedef std::shared_ptr<Pass> Pass_ptr; 
 typedef std::shared_ptr<Prnt> Prnt_ptr; 
@@ -87,8 +97,12 @@ typedef std::vector<Expn_ptr> Expn_vec;
 //
 
 class AST {
+private:
+    Locn locn; // Location of construct in source code (for reporting errors).
 public:
+    AST(Locn lo) : locn {lo} { }
     virtual void output(std::ostream& os) const = 0;
+    Locn where(void) const { return locn; }
 };
 
 
@@ -112,10 +126,11 @@ public:
     //
     Blck_ptr main;
     //
-    Prgm(Blck_ptr mn);
+    Prgm(Blck_ptr mn, Locn lo) : main {mn}, AST {lo} { }
+
     //
-    void run(void) const;                 // Execute the program by interpreting its code.
-    void output(std::ostream& os) const;  // Output formatted code.
+    void run(void) const; // Execute the program by interpreting its code.
+    void output(std::ostream& os) const; // Output formatted code.
 };
 
 //
@@ -141,31 +156,42 @@ public:
 //
 class Stmt : public AST {
 public:
+    Stmt(Locn lo) : AST {lo} { }
     virtual void exec(Ctxt& ctxt) const = 0;
     virtual void output(std::ostream& os, std::string indent) const = 0;
     virtual void output(std::ostream& os) const;
 };
 
+//
+// Asgn - assignment statement AST node
+//
 class Asgn : public Stmt {
 public:
     Name     name;
     Expn_ptr expn;
-    Asgn(Name x, Expn_ptr e) : name {x}, expn {e} { }
+    Asgn(Name x, Expn_ptr e, Locn l) : name {x}, expn {e}, Stmt {l}  { }
     void exec(Ctxt& ctxt) const;
     void output(std::ostream& os, std::string indent) const;
 };
 
+//
+// Prnt - print statement AST node
+//
 class Prnt : public Stmt {
 public:
     Expn_ptr expn;
-    Prnt(Expn_ptr e) : expn {e} { }
+    Prnt(Expn_ptr e, Locn l) : expn {e}, Stmt {l} { }
     void exec(Ctxt& ctxt) const;
     void output(std::ostream& os, std::string indent) const;
 };
 
+
+//
+// Pass - pass statement AST node
+//
 class Pass : public Stmt {
 public:
-    Pass(void) { }
+    Pass(Locn l) : Stmt {l} { }
     void exec(Ctxt& ctxt) const;
     void output(std::ostream& os, std::string indent) const;
 };
@@ -175,15 +201,14 @@ public:
 //
 // Represents a sequence of statements.
 //
-class Blck : public Stmt {
+class Blck : public AST {
 public:
     Stmt_vec stmts;
-    Blck(Stmt_vec ss) : stmts {ss} { }
+    Blck(Stmt_vec ss, Locn lo) : stmts {ss}, AST {lo}  { }
     void exec(Ctxt& ctxt) const;
     void output(std::ostream& os, std::string indent) const;
     void output(std::ostream& os) const;
 };
-
 
 
 //
@@ -207,65 +232,102 @@ public:
 //
 class Expn : public AST {
 public:
+    Expn(Locn lo) : AST {lo} { }
     virtual int eval(const Ctxt& ctxt) const = 0;
 };
 
+//
+// Plus - addition binary operation's AST node
+//
 class Plus : public Expn {
 public:
     Expn_ptr left;
     Expn_ptr rght;
-    Plus(Expn_ptr lf, Expn_ptr rg) : left {lf}, rght {rg} { }
+    Plus(Expn_ptr lf, Expn_ptr rg, Locn lo)
+        : left {lf}, rght {rg}, Expn {lo}  { }
     int eval(const Ctxt& ctxt) const;
     void output(std::ostream& os) const;
 };
 
+//
+// Mnus - subtraction binary operation's AST node
+//
 class Mnus : public Expn {
 public:
     Expn_ptr left;
     Expn_ptr rght;
-    Mnus(Expn_ptr lf, Expn_ptr rg) : left {lf}, rght {rg} { }
+    Mnus(Expn_ptr lf, Expn_ptr rg, Locn lo)
+        : left {lf}, rght {rg}, Expn {lo}  { }
     int eval(const Ctxt& ctxt) const;
     void output(std::ostream& os) const;
 };
 
+//
+// Tmes - multiplication binary operation's AST node
+//
 class Tmes : public Expn {
 public:
     Expn_ptr left;
     Expn_ptr rght;
-    Tmes(Expn_ptr lf, Expn_ptr rg) : left {lf}, rght {rg} { }
+    Tmes(Expn_ptr lf, Expn_ptr rg, Locn lo)
+        : left {lf}, rght {rg}, Expn {lo}  { }
     int eval(const Ctxt& ctxt) const;
     void output(std::ostream& os) const;
 };
 
+//
+// IDiv - quotient binary operation's AST node
+//
 class IDiv : public Expn {
 public:
     Expn_ptr left;
     Expn_ptr rght;
-    IDiv(Expn_ptr lf, Expn_ptr rg) : left {lf}, rght {rg} { }
+    IDiv(Expn_ptr lf, Expn_ptr rg, Locn lo)
+        : left {lf}, rght {rg}, Expn {lo}  { }
     int eval(const Ctxt& ctxt) const;
     void output(std::ostream& os) const;
 };
 
+//
+// Nmbr - integer literal AST node
+//
 class Nmbr : public Expn {
 public:
     int valu;
-    Nmbr(int vl) : valu {vl} { }
+    Nmbr(int vl, Locn lo) : valu {vl}, Expn {lo} { }
     int eval(const Ctxt& ctxt) const;
     void output(std::ostream& os) const;
 };
 
+//
+// Lkup - variable use/look-up AST node
+//
 class Lkup : public Expn {
 public:
     Name name;
-    Lkup(Name nm) : name {nm} { }
+    Lkup(Name nm, Locn lo) : name {nm}, Expn {lo} { }
     int eval(const Ctxt& ctxt) const;
     void output(std::ostream& os) const;
 };
 
+//
+// Inpt - input expression AST node
+//
 class Inpt : public Expn {
 public:
     std::string prpt;
-    Inpt(std::string pr) : prpt {pr} { }
+    Inpt(std::string pr, Locn lo) : prpt {pr}, Expn {lo} { }
+    int eval(const Ctxt& ctxt) const;
+    void output(std::ostream& os) const;
+};
+
+//
+// IntC - int conversion expression AST node
+//
+class IntC : public Expn {
+public:
+    Expn_ptr expn;
+    IntC(Expn_ptr e, Locn l) : expn {e}, Expn {l} { }
     int eval(const Ctxt& ctxt) const;
     void output(std::ostream& os) const;
 };

@@ -6,6 +6,7 @@
 #include <fstream>
 #include <sstream>
 #include <optional>
+#include "slpy-util.hh"
 
 //
 // Token
@@ -39,12 +40,15 @@ public:
 //    * at_name, at_number, at_string, at_EOF, at_EOLN
 //
 class TokenStream {    
-private:    
+private:
+    std::string src_name;
     std::vector<Token> tokens;
     int where;
 
 public:
-    TokenStream(void);
+    TokenStream(std::string filename);
+    std::string source_name(void);
+    Locn locate(void);
     //
     void append(Token tkn);
     //
